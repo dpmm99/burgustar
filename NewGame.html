@@ -1,0 +1,118 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Burgustar</title>
+</head>
+<body>
+<style>
+body {
+    color: #f80;
+    background-color: #171717;
+}
+a:visited, a:link, a:hover {
+	color: #bf9;
+}
+a:active {
+	color: #ca5;
+}
+button {
+    padding: 4px 14px;
+}
+input {
+    background-color: #333;
+    color: #f80;
+    font-weight: bold;
+}
+input[type="number"] {
+    width: 5em;
+}
+td {
+    padding: 1px 10px;
+}
+</style>
+<h1>Burgustar</h1>
+<h2>New Game Configuration</h2>
+
+<form>
+<table>
+<tr><td>Difficulty: &nbsp;</td><td><input type="number" min="0" max="100" step="1" value="50" name="difficulty"></td>
+<tr><td>Map width: &nbsp;</td><td><input type="number" min="8" max="256" step="1" value="32" name="map_width"></td>
+<tr><td>Map height: &nbsp;</td><td><input type="number" min="8" max="256" step="1" value="32" name="map_height"></td>
+<tr><td>Max turns you can play ahead of others: &nbsp;</td><td><input type="number" min="1" max="50" step="1" value="5" name="max_advance_plays"></td>
+<tr><td>Number of hours after which a player becomes inactive: &nbsp;</td><td><input type="number" min="0.01" max="999999" step="0.01" value="5" name="deactivate_players_after_hours"></td>
+</table>
+<h2>Invite up to 15 other players:</h2>
+<table>
+<thead><tr><th style="width:50%">Uninvited</th><th>Invited</th></tr></thead>
+<tr><td><input type="text" name="player_search" placeholder="Search to invite..." onchange="javascript:search()" onkeydown="javascript:search()"></td><td rowspan="2" style="border-left: 1px solid black;"><ul id="player_ids"></ul></td></tr>
+<tr><td><ul id="uninvited"></ul></td></tr>
+</table>
+</form>
+<br />
+<button onclick="javascript:submit()">Start Game</button>
+<script>
+const serverUrl = window.location.origin == "file://" ? "http://127.0.0.1:3000/" : (window.location.origin + "/burgustar/server/");
+
+var searchTimer = null;
+var lastSearch = "";
+var searchNumber = 0; //Counter for number of requests sent to /search
+var searchLoaded = 0; //The highest searchNumber whose response has been received
+function search() {
+	if (searchTimer) clearTimeout(searchTimer);
+	searchTimer = setTimeout(() => {
+		searchNumber++;
+		let query = encodeURIComponent(document.forms[0].player_search.value.replace(/[^a-z#]/gi, "").substr(0, 37));
+		if (query == lastSearch) return; //Don't search for the same thing that you're already showing the results for
+		let mySearchNumber = searchNumber;
+		fetch(serverUrl + "search?name=" + query, { method: 'GET' }) //37 because Discord usernames are limited to 32, plus the #, plus the discriminator (4 digits)
+		.then(res => res.json())
+		.then(res => {
+			if (mySearchNumber < searchLoaded) return; //Don't bother showing results if the response for another search arrived before this one and this one was an earlier search request
+			searchLoaded = mySearchNumber;
+			lastSearch = query;
+
+			var invitedPlayers = [...document.querySelectorAll("#player_ids [data-id]")].map(p => parseInt(p.dataset.id));
+			var listItems = [];
+			for (var x = 0; x < res.length; x++) {
+				if (invitedPlayers.includes(res[x].id)) continue;
+
+				var li = document.createElement("li");
+				var a = document.createElement("a");
+				a.innerText = res[x].name;
+				a.dataset.id = res[x].id;
+				a.href = "#";
+				a.setAttribute("onclick", "javascript:togglePlayer(this.parentElement)");
+				li.appendChild(a);
+				listItems.push(li);
+			}
+			document.getElementById("uninvited").replaceChildren(...listItems);
+		})
+		.catch(err => alert(err.text || err));
+	}, 250);
+}
+
+function togglePlayer(elem) {
+	var newParent = [document.getElementById("player_ids"), document.getElementById("uninvited")].filter(p => p != elem.closest("ul"))[0];
+	if (newParent.id == "player_ids" && newParent.children.length >= 15) {
+		alert("You have already invited the maximum number of players to this game.");
+		return false;
+    }
+	elem.remove();
+	newParent.appendChild(elem);
+	return false;
+}
+
+function submit() {
+	var playerIDs = [...document.querySelectorAll("#player_ids [data-id]")].map(p => "&player_ids=" + p.dataset.id).join(""); //Has the initial ampersand already included
+	fetch(serverUrl + "newgame?difficulty=" + document.forms[0].difficulty.value + "&map_width=" + document.forms[0].map_width.value + "&map_height=" + document.forms[0].map_height.value 
+		+ "&max_advance_plays=" + document.forms[0].max_advance_plays.value + "&deactivate_players_after_hours=" + document.forms[0].deactivate_players_after_hours.value + playerIDs, { method: 'GET' })
+	.then(res => res.json())
+	.then(res => {
+		window.location.href = serverUrl + "Burgustar.html?id=" + res.id;
+	})
+	.catch(err => alert(err.text || err));
+}
+</script>
+</body>
+</html>

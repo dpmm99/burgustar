@@ -1,0 +1,67 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Burgustar</title>
+</head>
+<body style="margin:0;width:100vw;height:100vh;">
+<style>
+@font-face {
+	font-family: "851gkktt";
+	src: local("851gkktt"), url(851gkktt.ttf);
+}
+#gameview {
+	width: 100vw;
+	height: 100vh;
+	font-family: '851gkktt', monospace;
+}
+text {
+	fill: #f80;
+	stroke: black;
+	paint-order: stroke fill;
+}
+#mapgroup {
+	stroke-width: 3px;
+	font-size: 24px;
+}
+#hudgroup {
+	stroke-width: 5px;
+	font-size: 32px;
+}
+</style>
+<svg id="gameview" viewBox="0 0 1900 1200" xmlns="http://www.w3.org/2000/svg" version="1.1" style="background-color: #252525">
+	<defs>
+		<filter id="allycolor"><feColorMatrix type="matrix" values=".3 .2 .2 0 0 .2 .3 .2 0 0 .2 .2 .3 0 0 0 0 0 1 0" /></filter>
+
+		<!--Unit tiers-->
+		<filter id="ftier0"><feColorMatrix type="matrix" values=".3 0 0 0 0 0 .3 0 0 0 0 0 .3 0 0 0 0 0 1 0" /></filter>
+		<filter id="ftier1"><feColorMatrix type="matrix" values=".6 0 0 0 0 0 .6 0 0 0 0 0 .6 0 0 0 0 0 1 0" /></filter>
+		<filter id="ftier2"><feColorMatrix type="saturate" values="1" /></filter>
+		<filter id="ftier3"><feColorMatrix type="matrix" values="1.2 .2 .2 0 0 .2 1.2 .2 0 0 .2 .2 1.2 0 0 0 0 0 1 0" /></filter>
+		<filter id="ftier4"><feColorMatrix type="matrix" values="1.3 .4 .4 0 0 .4 1.3 .4 0 0 .4 .4 1.3 0 0 0 0 0 1 0" /></filter>
+
+		<!--Unit categories-->
+		<filter id="fcat0"><feColorMatrix type="hueRotate" values="201" /><feColorMatrix type="saturate" values="0.84" /></filter>
+		<filter id="fcat1"><feColorMatrix type="hueRotate" values="0" /><feColorMatrix type="saturate" values="0.88" /></filter>
+		<filter id="fcat2"><feColorMatrix type="hueRotate" values="65" /><feColorMatrix type="matrix" values="1.75 0 0 0 0 0 1.8 0 0 0 .1 0 0 0 0 0 0 0 1 0" /></filter>
+		<filter id="fcat3"><feColorMatrix type="hueRotate" values="144" /><feColorMatrix type="saturate" values="0.86" /></filter>
+		<filter id="fcat4"><feColorMatrix type="hueRotate" values="136" /><feColorMatrix type="saturate" values="0.3" /></filter>
+		<filter id="fcat5"><feColorMatrix type="hueRotate" values="30" /></filter>
+		<filter id="fcat6"><feColorMatrix type="hueRotate" values="30" /><feColorMatrix type="saturate" values="0.17" /></filter>
+		<filter id="fcat7"><feColorMatrix type="hueRotate" values="282" /></filter>
+		<filter id="fcat8"><feColorMatrix type="saturate" values="0" /><feColorMatrix type="matrix" values="1.5 1.5 1.5 0 0 1.5 1.5 1.5 0 0 1.5 1.5 1.5 0 0 0 0 0 1 0" /></filter>
+		<filter id="fcat9"><feColorMatrix type="hueRotate" values="325" /></filter>
+		<filter id="fcat10"><feColorMatrix type="hueRotate" values="35" /></filter>
+		<filter id="fcat11"><feColorMatrix type="hueRotate" values="0" /></filter>
+
+		<path d="M0,0 0,600 220,600 220,0z" id="scrollListPath"></path>
+	</defs>
+	<clipPath id="scrollListClipPath"><use xlink:href="#scrollListPath" clip-rule="evenodd"></use></clipPath>
+	<g id="mapgroup"></g>
+	<g id="hudgroup"><rect width="100%" height="100%" fill="#171717" stroke-width="0" /></g>
+</svg>
+
+<script name="client-and-server" src="shared.js"></script>
+<script name="client-only" src="client.js"></script>
+</body>
+</html>

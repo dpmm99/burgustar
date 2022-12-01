@@ -1,0 +1,9 @@
+{
+  "apps": [
+    {
+      "name": "burgustar",
+      "script": "npm",
+      "args": "start server.js"
+    }
+  ]
+}
