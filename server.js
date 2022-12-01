@@ -36,10 +36,10 @@ async function newSession() {
 /** After getting the user info from Discord's API, call this along with their session ID to ensure that their Discord data (including their Discord ID, if they didn't have a record in our DB before) is up-to-date and ensure the session is set to point to the appropriate player record ID. */
 async function playerLoggingIn(discordUserObject, sessionID) {
 	var response = await query(`SET @id = NULL;SET @discord_id = ?;
-SELECT id INTO @id FROM burgustar_players WHERE discord_id = @discord_id;
+SET @id = (SELECT id FROM burgustar_players WHERE discord_id = @discord_id);
 INSERT INTO burgustar_players (id, discord_id, avatar, display_name, discriminator) VALUES (@id, @discord_id, ?, ?, ?)
 	ON DUPLICATE KEY UPDATE avatar=VALUES(avatar), display_name=VALUES(display_name), discriminator=VALUES(discriminator);
-SET @id = COALESCE(@id, CAST(LAST_INSERT_ID() AS SIGNED));
+SET @id = COALESCE(@id, LAST_INSERT_ID());
 UPDATE burgustar_sessions SET player_id = @id WHERE id = ?;
 SELECT @id AS ID;`, [discordUserObject.id, discordUserObject.avatar, discordUserObject.username, discordUserObject.discriminator, sessionID]);
 	return response[response.length - 1][0].ID; //Their internal ID, brand new or otherwise
