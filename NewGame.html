@@ -62,7 +62,7 @@ function search() {
 	if (searchTimer) clearTimeout(searchTimer);
 	searchTimer = setTimeout(() => {
 		searchNumber++;
-		let query = encodeURIComponent(document.forms[0].player_search.value.replace(/[^a-z#]/gi, "").substr(0, 37));
+		let query = encodeURIComponent(document.forms[0].player_search.value.replace(/[^a-z#]/gi, "").substring(0, 37));
 		if (query == lastSearch) return; //Don't search for the same thing that you're already showing the results for
 		let mySearchNumber = searchNumber;
 		fetch(serverUrl + "search?name=" + query, { method: 'GET' }) //37 because Discord usernames are limited to 32, plus the #, plus the discriminator (4 digits)

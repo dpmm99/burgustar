@@ -3,7 +3,7 @@
 const Buffer = require("buffer").Buffer;
 const mysql = require("mysql");
 const crypto = require('crypto');
-const fetch = require('node-fetch');
+const fetch = (...args) => import('node-fetch').then(({ default: fetch }) => fetch(...args));
 const util = require('util');
 
 /** Open the database connection and run the given query with the given parameters, then return the result. */
@@ -364,208 +364,246 @@ function startServer() {
 		return list;
 	}
 
-	const server = http.createServer(async (req, res) => {
-		const cookies = parseCookies(req);
-		const offline = req.headers.host.includes("127.0.0.1");
-		const urlObject = new URL(req.url, `https://${req.headers.host}`);
-		console.log(req);
-		const urlParent = urlObject.pathname.replace(/\/[^/]*?$/i, "/"); //e.g. "127.0.0.1:3000//burgustar/Burgustar.html" would become "127.0.0.1:3000//burgustar/" and "aureuscode.com/burgustar/Burgustar.html" would become "aureuscode.com/burgustar/"
-		const lowercasePath = urlObject.pathname.toLowerCase();
-		function onError(err) {
-			res.statusCode = 500;
-			res.setHeader('Access-Control-Allow-Origin', '*'); //No longer needed for most requests since my local debugging can be done solely with http://127.0.0.1/ addresses now
-			res.setHeader('Content-Type', 'application/javascript');
-			res.end(err.text ? JSON.stringify(err) : (err instanceof TypeError) ? JSON.stringify({text: err.toString()}) : JSON.stringify({text: err})); //so you can return a plain string or multiple strings for multiple languages
-        }
-		function forbid() {
-			res.statusCode = 403;
-			res.setHeader('Content-Type', 'text/plain');
-			res.end("You're not logged in as the right person for that action.");
-		}
-		/** Make sure the user has a session cookie, has a *valid* session cookie, and is fully logged in, and return their ID (undefined if not logged in). The first parameter causes a 307 redirect if true, but the second parameter changes it to a JSON response containing only a redirectTo string if true. */
-		async function getSessionPlayerID(redirectToLoginIfNot, redirectAsJson) {
-			if (!cookies.session || !cookies.session.length) {
-				var setCookie = true;
-				cookies.session = await newSession();
-			} else {
-				var playerID = await validateSession(cookies.session);
-				if (playerID === undefined) { //Expired session
-					setCookie = true;
-					cookies.session = await newSession();
-                }
-			}
-			if (setCookie) res.setHeader('Set-Cookie', "session=" + encodeURI(cookies.session)); //Set the cookie regardless of whether we actually want to redirect (this case would be used for /login)
-			if (redirectToLoginIfNot && !playerID) { //Not logged in--possibly because they had no cookie, but possibly not. Either way, no full response!
-				const loginUrl = urlObject.pathname.substr(0, urlObject.pathname.lastIndexOf("/")) + "/login";
-				if (redirectAsJson) {
-					res.statusCode = 200;
-					res.end(JSON.stringify({ redirectTo: loginUrl }));
-				} else {
-					res.statusCode = 307;
-					res.setHeader('Location', loginUrl);
-					res.end();
-				}
-			}
-			return playerID;
-        }
-
-		if (urlObject.pathname.endsWith("/info")) {
-			res.statusCode = 200;
-			res.setHeader('Content-Type', 'text/plain');
-			res.end('Burgustar server. Running on NodeJS ' + process.versions.node);
-		} else if (lowercasePath.endsWith("/search")) {
-			//Don't care too much if someone not logged in is querying the search endpoint...
-			var name = urlObject.searchParams.get("name");
-			if (name) name = name.replace(/[^a-z#]/gi, "").substr(0, 37); //Drop disallowed characters before checking if we should avoid searching. The 37 is the 32 max Discord username length + "#" + discriminator length (4, all digits)
-			if (!name) {
-				res.statusCode = 200;
-				res.setHeader('Content-Type', 'application/json');
-				res.end("[]");
-				return;
-			}
-
-			try {
-				//Respond with [{name,id}, ...] where name includes the Discord username plus # plus discriminator
-				var searchResults = await searchPlayers(name);
-
-				res.statusCode = 200;
-				res.setHeader('Content-Type', 'application/json');
-				res.end(JSON.stringify(searchResults));
-			} catch (err) {
-				onError(err);
-            }
-		} else if (lowercasePath.endsWith("/newgame")) {
-			const playerID = await getSessionPlayerID(true, true);
-			if (!playerID) return;
-
-			try {
-				const config = {
-					version: 0 /*Current gameplay version*/, w: parseInt(urlObject.searchParams.get("map_width")), h: parseInt(urlObject.searchParams.get("map_height")),
-					maxAdvancePlays: parseInt(urlObject.searchParams.get("max_advance_plays")), deactivatePlayersAfterHours: parseFloat(urlObject.searchParams.get("deactivate_players_after_hours")), difficulty: parseInt(urlObject.searchParams.get("difficulty"))
-				};
-				const players = distinct(urlObject.searchParams.getAll("player_ids").map(p => parseInt(p)).concat(playerID)); //Force the player to be in their own game, and prevent the same player from being included twice
-				if (config.w < 8 || config.h < 8 || config.w > 256 || config.h > 256 || config.difficulty < 0 || config.difficulty > 100 || config.maxAdvancePlays < 1 || config.maxAdvancePlays > 50 || config.deactivatePlayersAfterHours < 0.01 || !players.length || players.length > 16) throw "Config rejected";
-
-				console.log("Making game for player IDs: " + players.join());
-				const state = await newGame(config, players);
-				console.log("Started game " + config.id + " successfully. Generated " + state.units.length + " units in the initial state.");
-				res.statusCode = 200;
-				res.setHeader('Content-Type', 'application/json');
-				res.end(JSON.stringify(config));
-			} catch (err) {
-				onError(err);
-			}
-		} else if (lowercasePath.endsWith("/game")) {
-			const playerID = await getSessionPlayerID(true, true);
-			if (!playerID) return;
-
-			var gameID = parseInt(urlObject.searchParams.get("id"));
-			if (req.method.toLowerCase() == 'get') {
-				if (!(await playerHasCityAccess(playerID, gameID))) return forbid(); //Make sure players can only load cities that they are involved in (they can be added as observers via the DB right now)
-				try {
-					const { config, gameStates } = await loadFromDB(gameID, []);
-					gameStates.forEach(state => state.players.forEach(p => delete p.buildabilityMatrix)); //Don't send this excessive amount of data the client can easily generate if it needs to (without any special coding)
-					res.statusCode = 200;
-					res.setHeader('Content-Type', 'application/json');
-					res.end(JSON.stringify({ config, gameStates, playerID }));
-				} catch (err) {
-					onError(err);
-				}
-			} else if (req.method.toLowerCase() == 'post') { //Applies a list of deltas (if they're valid).
-				let requestBody = "";
-				req.on("data", chunk => requestBody += chunk);
-				req.on("end", async () => {
-					try {
-						const newDeltas = JSON.parse(requestBody);
-						//TODO: Also accept the turn number to make sure no requests were missed
-						const { rejectionReason } = await updateDeltasInDB(gameID, playerID, newDeltas) || {}; //Use || {} when destructuring a potentially undefined return value
-						if (rejectionReason) {
-							//When it comes across an invalid delta that was submitted in newDeltas (it's not an error if the new deltas invalidate OTHER players' moves, but it is an error if these deltas are invalid)
-							res.statuscode = 409; //HTTP 409 status code: "Conflict" - the server state doesn't jive with the request
-							res.setHeader('Content-Type', 'application/javascript');
-							res.end(JSON.stringify(rejectionReason));
-						} else {
-							res.statusCode = 200;
-							res.setHeader('Content-Type', 'application/javascript');
-							res.end(JSON.stringify({ ok: true })); //TODO: Might wanna send any new deltas to every player who's online, but would rather do that with an always-open connection if feasible
-						}
-					} catch (err) {
-						onError(err);
+	function jsonStringifyRecursive(obj) { //JSON.stringify but without the "cyclical reference" errors
+		const cache = new Set();
+		return JSON.stringify(
+			obj,
+			(key, value) => {
+				if (typeof value === 'object' && value !== null) {
+					if (cache.has(value)) {
+						// Circular reference found; discard key by returning undefined
+						return;
 					}
-				});
-
+					// Note that we've seen this object before
+					cache.add(value);
+				}
+				return value;
 			}
-		} else if (lowercasePath.endsWith("/login")) {
-			var playerID = await getSessionPlayerID(); //We're redirecting either way, so don't pass in true to avoid a redirect loop, but it'll still set the cookie header if needed
+		);
+	}
 
-			if (playerID) { //Already logged in
-				//res.statusCode = 307;
-								res.statusCode = 200;
-								res.setHeader('Content-Type', 'application/json');
-								res.end("Redirect from pathname: '" + urlObject.pathname + "' to '" + urlParent);
-				//res.setHeader('Location', urlParent + "home");
-				//res.end();
-			} else { //Need Discord to vouch for you
-				const oauthClient = new AuthorizationCode(oauthConfig);
-				const authorizationUri = oauthClient.authorizeURL({
-					redirect_uri: offline ? `http://${req.headers.host}/loggedin` : `https://${req.headers.host}/burgustar/server/loggedin`, //These URLs have to be whitelisted in the Discord app settings
-					scope: 'identify',
-					state: await stringHash(cookies.session)
-				});
-
-				res.statusCode = 307;
-				res.setHeader('Location', authorizationUri);
-				res.end();
+	const server = http.createServer(async (req, res) => {
+		try {
+			const cookies = parseCookies(req);
+			const offline = req.headers.host.includes("127.0.0.1") || req.headers.host.startsWith("localhost");
+			const urlObject = new URL(req.url, `https://${req.headers.host}`);
+			//console.log(req);
+			const urlParent = urlObject.pathname.replace(/\/[^/]*?$/i, "/"); //e.g. "127.0.0.1:3000//burgustar/Burgustar.html" would become "127.0.0.1:3000//burgustar/" and "aureuscode.com/burgustar/Burgustar.html" would become "aureuscode.com/burgustar/"
+			const lowercasePath = urlObject.pathname.toLowerCase();
+			function onError(err) {
+				res.statusCode = 500;
+				res.setHeader('Access-Control-Allow-Origin', '*'); //No longer needed for most requests since my local debugging can be done solely with http://127.0.0.1/ addresses now
+				res.setHeader('Content-Type', 'application/javascript');
+				res.end(err.text ? JSON.stringify(err) : (err instanceof TypeError) ? JSON.stringify({text: err.toString()}) : jsonStringifyRecursive({text: err})); //so you can return a plain string or multiple strings for multiple languages
 			}
-		} else if (lowercasePath.endsWith("/loggedin")) {
-			//Query string parameter "code" is received from Discord, along with state (which is just repeating a string we sent them)
-			if (!cookies.session || !cookies.session.length || urlObject.searchParams.get("state") != await stringHash(cookies.session)) return onError("Invalid state response from Discord for this user session.");
-			//TODO: If there's a URL fragment #access_token= ... then use that instead of making the followup request (should be either 100% or 0% of the time)
+			function forbid() {
+				res.statusCode = 403;
+				res.setHeader('Content-Type', 'text/plain');
+				res.end("You're not logged in as the right person for that action.");
+			}
+			/** Make sure the user has a session cookie, has a *valid* session cookie, and is fully logged in, and return their ID (undefined if not logged in). The first parameter causes a 307 redirect if true, but the second parameter changes it to a JSON response containing only a redirectTo string if true. */
+			async function getSessionPlayerID(redirectToLoginIfNot, redirectAsJson) {
+				if (!cookies.session || !cookies.session.length) {
+					var setCookie = true;
+					cookies.session = await newSession();
+				} else {
+					var playerID = await validateSession(cookies.session);
+					if (playerID === undefined) { //Expired session
+						setCookie = true;
+						cookies.session = await newSession();
+					}
+				}
+				if (setCookie) res.setHeader('Set-Cookie', "session=" + encodeURI(cookies.session)); //Set the cookie regardless of whether we actually want to redirect (this case would be used for /login)
+				if (redirectToLoginIfNot && !playerID) { //Not logged in--possibly because they had no cookie, but possibly not. Either way, no full response!
+					const loginUrl = urlObject.pathname.substring(0, urlObject.pathname.lastIndexOf("/")) + "/login";
+					if (redirectAsJson) {
+						res.statusCode = 200;
+						res.end(JSON.stringify({ redirectTo: loginUrl }));
+					} else {
+						res.statusCode = 307;
+						res.setHeader('Location', loginUrl);
+						res.end();
+					}
+				}
+				return playerID;
+			}
 
-			const tokenParams = {
-				code: urlObject.searchParams.get("code"),
-				redirect_uri: offline ? `http://${req.headers.host}/loggedin` : `https://${req.headers.host}/burgustar/server/loggedin`, //These URLs have to be whitelisted in the Discord app settings
-				scope: 'identify'
-			};
+			if (urlObject.pathname.endsWith("/info")) {
+				res.statusCode = 200;
+				res.setHeader('Content-Type', 'text/plain');
+				res.end('Burgustar server. Running on NodeJS ' + process.versions.node);
+			} else if (lowercasePath.endsWith("/") || lowercasePath.endsWith("/index")) {
+				// Landing page - redirect to home if already logged in
+				var playerID = await getSessionPlayerID();
 
-			const oauthClient = new AuthorizationCode(oauthConfig);
-			oauthClient.getToken(tokenParams).then(accessToken => { //accessToken.token is the Discord-defined token object, but accessToken has its own methods: https://github.com/lelylan/simple-oauth2/blob/HEAD/API.md#accesstoken
-				//I only wanted to know the user's identity, so make one more web request to get their ID.
-				fetch(oauthConfig.auth.tokenHost + '/oauth2/@me', { headers: { Authorization: `${accessToken.token.token_type} ${accessToken.token.access_token}` } }).then(p => p.json()).then(async response => {
-					//Find the right player record in the DB for this user. If there isn't one, make one.
-					const playerID = await playerLoggingIn(response.user, cookies.session);
-					console.log("Logged in as user ID: " + response.user.id + " with username: " + response.user.username + "#" + response.user.discriminator + " and identified as player " + playerID); //Can also use .avatar to display their avatar in the game: https://discord.com/api/avatars/{user_id}/{user_avatar}.png
+				if (playerID) {
 					res.statusCode = 307;
 					res.setHeader('Location', urlParent + "home");
 					res.end();
+				} else {
+					res.statusCode = 200;
+					res.setHeader('Content-Type', 'text/html');
+					const fs = require('fs');
+					const readStream = fs.createReadStream("index.html");
+					readStream.on('open', () => readStream.pipe(res));
+					readStream.on('error', onError);
+				}
+			} else if (lowercasePath.endsWith("/search")) {
+				//Don't care too much if someone not logged in is querying the search endpoint...
+				var name = urlObject.searchParams.get("name");
+				if (name) name = name.replace(/[^a-z#]/gi, "").substring(0, 37); //Drop disallowed characters before checking if we should avoid searching. The 37 is the 32 max Discord username length + "#" + discriminator length (4, all digits)
+				if (!name) {
+					res.statusCode = 200;
+					res.setHeader('Content-Type', 'application/json');
+					res.end("[]");
+					return;
+				}
+
+				try {
+					//Respond with [{name,id}, ...] where name includes the Discord username plus # plus discriminator
+					var searchResults = await searchPlayers(name);
+
+					res.statusCode = 200;
+					res.setHeader('Content-Type', 'application/json');
+					res.end(JSON.stringify(searchResults));
+				} catch (err) {
+					onError(err);
+				}
+			} else if (lowercasePath.endsWith("/newgame")) {
+				const playerID = await getSessionPlayerID(true, true);
+				if (!playerID) return;
+
+				try {
+					const config = {
+						version: 0 /*Current gameplay version*/, w: parseInt(urlObject.searchParams.get("map_width")), h: parseInt(urlObject.searchParams.get("map_height")),
+						maxAdvancePlays: parseInt(urlObject.searchParams.get("max_advance_plays")), deactivatePlayersAfterHours: parseFloat(urlObject.searchParams.get("deactivate_players_after_hours")), difficulty: parseInt(urlObject.searchParams.get("difficulty"))
+					};
+					const players = distinct(urlObject.searchParams.getAll("player_ids").map(p => parseInt(p)).concat(playerID)); //Force the player to be in their own game, and prevent the same player from being included twice
+					if (config.w < 8 || config.h < 8 || config.w > 256 || config.h > 256 || config.difficulty < 0 || config.difficulty > 100 || config.maxAdvancePlays < 1 || config.maxAdvancePlays > 50 || config.deactivatePlayersAfterHours < 0.01 || !players.length || players.length > 16) throw "Config rejected";
+
+					console.log("Making game for player IDs: " + players.join());
+					const state = await newGame(config, players);
+					console.log("Started game " + config.id + " successfully. Generated " + state.units.length + " units in the initial state.");
+					res.statusCode = 200;
+					res.setHeader('Content-Type', 'application/json');
+					res.end(JSON.stringify(config));
+				} catch (err) {
+					onError(err);
+				}
+			} else if (lowercasePath.endsWith("/game")) {
+				const playerID = await getSessionPlayerID(true, true);
+				if (!playerID) return;
+
+				var gameID = parseInt(urlObject.searchParams.get("id"));
+				if (req.method.toLowerCase() == 'get') {
+					if (!(await playerHasCityAccess(playerID, gameID))) return forbid(); //Make sure players can only load cities that they are involved in (they can be added as observers via the DB right now)
+					try {
+						const { config, gameStates } = await loadFromDB(gameID, []);
+						gameStates.forEach(state => state.players.forEach(p => delete p.buildabilityMatrix)); //Don't send this excessive amount of data the client can easily generate if it needs to (without any special coding)
+						res.statusCode = 200;
+						res.setHeader('Content-Type', 'application/json');
+						res.end(JSON.stringify({ config, gameStates, playerID }));
+					} catch (err) {
+						onError(err);
+					}
+				} else if (req.method.toLowerCase() == 'post') { //Applies a list of deltas (if they're valid).
+					let requestBody = "";
+					req.on("data", chunk => requestBody += chunk);
+					req.on("end", async () => {
+						try {
+							const newDeltas = JSON.parse(requestBody);
+							//TODO: Also accept the turn number to make sure no requests were missed
+							const { rejectionReason } = await updateDeltasInDB(gameID, playerID, newDeltas) || {}; //Use || {} when destructuring a potentially undefined return value
+							if (rejectionReason) {
+								//When it comes across an invalid delta that was submitted in newDeltas (it's not an error if the new deltas invalidate OTHER players' moves, but it is an error if these deltas are invalid)
+								res.statuscode = 409; //HTTP 409 status code: "Conflict" - the server state doesn't jive with the request
+								res.setHeader('Content-Type', 'application/javascript');
+								res.end(JSON.stringify(rejectionReason));
+							} else {
+								res.statusCode = 200;
+								res.setHeader('Content-Type', 'application/javascript');
+								res.end(JSON.stringify({ ok: true })); //TODO: Might wanna send any new deltas to every player who's online, but would rather do that with an always-open connection if feasible
+							}
+						} catch (err) {
+							onError(err);
+						}
+					});
+
+				}
+			} else if (lowercasePath.endsWith("/login")) {
+				var playerID = await getSessionPlayerID(); //We're redirecting either way, so don't pass in true to avoid a redirect loop, but it'll still set the cookie header if needed
+
+				if (playerID) { //Already logged in
+					//res.statusCode = 307;
+									res.statusCode = 200;
+									res.setHeader('Content-Type', 'application/json');
+									res.end("Redirect from pathname: '" + urlObject.pathname + "' to '" + urlParent);
+					//res.setHeader('Location', urlParent + "home");
+					//res.end();
+				} else { //Need Discord to vouch for you
+					const oauthClient = new AuthorizationCode(oauthConfig);
+					const authorizationUri = oauthClient.authorizeURL({
+						redirect_uri: offline ? `http://${req.headers.host}/loggedin` : `https://${req.headers.host}/burgustar/server/loggedin`, //These URLs have to be whitelisted in the Discord app settings
+						scope: 'identify',
+						state: await stringHash(cookies.session)
+					});
+
+					res.statusCode = 307;
+					res.setHeader('Location', authorizationUri);
+					res.end();
+				}
+			} else if (lowercasePath.endsWith("/loggedin")) {
+				//Query string parameter "code" is received from Discord, along with state (which is just repeating a string we sent them)
+				if (!cookies.session || !cookies.session.length || urlObject.searchParams.get("state") != await stringHash(cookies.session)) return onError("Invalid state response from Discord for this user session.");
+				//TODO: If there's a URL fragment #access_token= ... then use that instead of making the followup request (should be either 100% or 0% of the time)
+
+				const tokenParams = {
+					code: urlObject.searchParams.get("code"),
+					redirect_uri: offline ? `http://${req.headers.host}/loggedin` : `https://${req.headers.host}/burgustar/server/loggedin`, //These URLs have to be whitelisted in the Discord app settings
+					scope: 'identify'
+				};
+
+				const oauthClient = new AuthorizationCode(oauthConfig);
+				oauthClient.getToken(tokenParams).then(accessToken => { //accessToken.token is the Discord-defined token object, but accessToken has its own methods: https://github.com/lelylan/simple-oauth2/blob/HEAD/API.md#accesstoken
+					//I only wanted to know the user's identity, so make one more web request to get their ID.
+					fetch(oauthConfig.auth.tokenHost + '/oauth2/@me', { headers: { Authorization: `${accessToken.token.token_type} ${accessToken.token.access_token}` } }).then(p => p.json()).then(async response => {
+						//Find the right player record in the DB for this user. If there isn't one, make one.
+						const playerID = await playerLoggingIn(response.user, cookies.session);
+						console.log("Logged in as user ID: " + response.user.id + " with username: " + response.user.username + "#" + response.user.discriminator + " and identified as player " + playerID); //Can also use .avatar to display their avatar in the game: https://discord.com/api/avatars/{user_id}/{user_avatar}.png
+						res.statusCode = 307;
+						res.setHeader('Location', urlParent + "home");
+						res.end();
+					}).catch(err => onError(err));
 				}).catch(err => onError(err));
-			}).catch(err => onError(err));
-		} else if (lowercasePath.endsWith("/home")) {
-			const playerID = await getSessionPlayerID(true, false); //Need to be logged in
-			if (!playerID) return;
+			} else if (lowercasePath.endsWith("/home")) {
+				const playerID = await getSessionPlayerID(true, false); //Need to be logged in
+				if (!playerID) return;
 
-			var myGames = await getPlayerCities(playerID);
-			res.statusCode = 200;
-			var html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><title>Burgustar</title></head><body><style>body{color:#f80;background-color:#171717;}a:visited,a:link,a:hover{color:#bf9;}a:active{color:#ca5;}button{padding:4px 14px;}input{background-color:#333;color:#f80;font-weight:bold;}input[type="number"]{width:5em;}td{padding:1px 10px;}</style>
-<h1>Burgustar</h1><h2>Player Dashboard</h2><div><a href="NewGame.html"><h3>New Game</h3></a></div><h3>Your Games</h3></body></html>`;
-			myGames.forEach(game => {
-				html += `<a href="${(offline ? urlParent : urlParent.replace("/server/", "/"))}Burgustar.html?id=${game.city_id}">Parallel Universe #${game.city_id}</a><br>`;
-			});
+				var myGames = await getPlayerCities(playerID);
+				res.statusCode = 200;
+				var html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /><title>Burgustar</title></head><body><style>body{color:#f80;background-color:#171717;}a:visited,a:link,a:hover{color:#bf9;}a:active{color:#ca5;}button{padding:4px 14px;}input{background-color:#333;color:#f80;font-weight:bold;}input[type="number"]{width:5em;}td{padding:1px 10px;}</style>
+	<h1>Burgustar</h1><h2>Player Dashboard</h2><div><a href="NewGame.html"><h3>New Game</h3></a></div><h3>Your Games</h3></body></html>`;
+				myGames.forEach(game => {
+					html += `<a href="${(offline ? urlParent : urlParent.replace("/server/", "/"))}Burgustar.html?id=${game.city_id}">Parallel Universe #${game.city_id}</a><br>`;
+				});
 
-			res.end(html); //TODO: Would really rather redirect to a static HTML file that then queries the player's games with an AJAX request.
-		} else if (lowercasePath.endsWith(".html") || lowercasePath.endsWith(".js") || lowercasePath.endsWith(".png") || lowercasePath.endsWith(".ttf") || lowercasePath.endsWith(".ico")) { //This is for local testing because it can't redirect to a file:// path, but it also works okay on the server (aside from losing features like compression).
-			//Just send the file (but only files in the exact same directory as the server files, no subdirectories or anything)
-			const filename = urlObject.pathname.substr(urlObject.pathname.lastIndexOf("/") + 1);
-			res.statusCode = 200;
-			res.setHeader("Content-Type", lowercasePath.endsWith(".html") ? "text/html" : lowercasePath.endsWith(".js") ? "application/javascript" : lowercasePath.endsWith(".png") ? "image/png" : lowercasePath.endsWith(".ico") ? "image/x-icon" : "application/octet-stream");
-			const fs = require('fs');
-			const readStream = fs.createReadStream(filename);
-			readStream.on('open', () => readStream.pipe(res));
-			readStream.on('error', onError);
-		} else {
-			res.statusCode = 404;
-			res.end();
-        }
+				res.end(html); //TODO: Would really rather redirect to a static HTML file that then queries the player's games with an AJAX request.
+			} else if (lowercasePath.endsWith(".html") || lowercasePath.endsWith(".js") || lowercasePath.endsWith(".png") || lowercasePath.endsWith(".ttf") || lowercasePath.endsWith(".ico")) { //This is for local testing because it can't redirect to a file:// path, but it also works okay on the server (aside from losing features like compression).
+				//Just send the file (but only files in the exact same directory as the server files, no subdirectories or anything)
+				const filename = urlObject.pathname.substring(urlObject.pathname.lastIndexOf("/") + 1);
+				res.statusCode = 200;
+				res.setHeader("Content-Type", lowercasePath.endsWith(".html") ? "text/html" : lowercasePath.endsWith(".js") ? "application/javascript" : lowercasePath.endsWith(".png") ? "image/png" : lowercasePath.endsWith(".ico") ? "image/x-icon" : "application/octet-stream");
+				const fs = require('fs');
+				const readStream = fs.createReadStream(filename);
+				readStream.on('open', () => readStream.pipe(res));
+				readStream.on('error', onError);
+			} else {
+				res.statusCode = 404;
+				res.end();
+			}
+		} catch (err) {
+			onError(err);
+		}
 	});
 
 	server.listen(3000, '127.0.0.1', () => {

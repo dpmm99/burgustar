@@ -255,14 +255,14 @@ function wrapSvgText(elem, leftPad, maxWidth, maxSquish, maxLines, text) { //Wor
 					//Move the last word from newElem.textContent to remainingText. Could use lengthEstimate to try to move multiple words at a time.
                     var movable = newText.lastIndexOf(" ");
 					if (movable > 1) {
-                        var chopped = newText.substr(movable);
-                        newElem.textContent = newText = newText.substr(0, movable);
+                        var chopped = newText.substring(movable);
+                        newElem.textContent = newText = newText.substring(0, movable);
 						remainingText = chopped + remainingText;
 					} else {
 						//TODO: hyphen, then mid-word breaks
                         movable = newText.length - 1;
-                        remainingText = newText.substr(movable) + remainingText;
-                        newElem.textContent = newText = newText.substr(0, movable);
+                        remainingText = newText.substring(movable) + remainingText;
+                        newElem.textContent = newText = newText.substring(0, movable);
                     }
 				}
 			} while (textWidth > maxWidth + maxSquish);
@@ -529,7 +529,7 @@ function updateMenu(advancingTurn) {
 					shownMenu.elem.lastElementChild.onmousedown = (event) => { //If you click the Confirm area, it should complete the build in the displayed line.
 						if (event.button) return;
 						gameStates[viewingGameStateIdx].update(currentGameConfig, { playerIdx: viewAsPlayerIdx, action: ACT_LINE_BUILD, unitDefID: shownMenu.unitDefID, x: shownMenu.x, y: shownMenu.y, endX: shownMenu.confirmingX, endY: shownMenu.confirmingY });
-						shownMenu.close();
+						shownMenu.close(event);
 						clientAdvanceTurn(); //Line builds end the turn
 					};
 					//TODO: Move it around as needed--probably just right above or right below the highlighted area; probably only move it up to -resourceMenuSectionHeight if it's partially or completely covered by the HUD
@@ -838,7 +838,7 @@ function updateDisplay(advancingTurn) {
     updateMenu(advancingTurn);
 }
 
-function showInfoWindow(unitDefID) {
+function showInfoWindow() {
 	if (shownMenu) shownMenu.close();
     shownMenu = new MapCoordMenu("info", 0, 0);
     updateMenu();
@@ -1091,7 +1091,7 @@ class MapCoordMenu {
 		this.elem.onmousedown = this.close; //Actually should be on pretty much everything BUT the menu, but this applies to the construction area highlight as well
 	}
 	
-	close() {
+	close(event) {
 		shownMenu.elem.remove();
 		shownMenu = null;
 		if (event) {
@@ -1106,7 +1106,7 @@ class MapCoordMenu {
 function mouseDownHandler(event, menuType) {
 	if (event.button == 0 || event.button == 2) { //Pop open a menu for left- or right-click
 		var pos = roundToMapCoords(event);
-		if (shownMenu && shownMenu.elem) return shownMenu.close();
+		if (shownMenu && shownMenu.elem) return shownMenu.close(event);
 
 		//Clicking along the right and probably bottom edges of sprites can result in the wrong one getting clicked or the sprite getting the click event but the position being interpreted as an empty tile, so do a quick check to prevent that case
 		if (menuType == "alterUnit" && !gameStates[viewingGameStateIdx].units.find(p => p.x == pos.x / TILE_SIZE && p.y == pos.y / TILE_SIZE)) menuType = "buildCategories";
@@ -1220,7 +1220,7 @@ if (window.location.search.length < 5) {
 		switchToGame(config, [state]);
 	})();
 } else {
-	var searchParams = window.location.search.substr(1).split("=");
+	var searchParams = window.location.search.substring(1).split("=");
 	if (searchParams[0].toLowerCase() == "id") {
 		//Connect to server and load a game state from there (hard-coded for testing)
 		fetch(serverUrl + "game?id=" + parseInt(searchParams[1]), { method: 'GET' })
