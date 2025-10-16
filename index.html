@@ -88,7 +88,62 @@
 
         <details id="about-burgustar">
             <summary>About Burgustar</summary>
-            <p>Welcome to Burgustar, a turn-based strategy game.</p>
+            <p>I (DeProgrammer) designed and implemented Burgustar in 2021 specifically so I would have something to play asynchronously with my Japanese language exchange partner. The game supports both English and Japanese language options and uses Discord as its sole login method. It was also an experiment in a game design that allows one player to 'play ahead' of the others, and if the others invalidate that player's move, their actions revert back to that turn number.</p>
+
+            <h3>Things you can do:</h3>
+            <ul>
+                <li>Log in with Discord.</li>
+                <li>Find and invite other players by partial Discord ID, but only if they have logged into the game before.</li>
+                <li>Cooperatively build a colony on the distant planet Burgustar, gathering resources like Construction Materials, Water, Fuel, Uranium, and Tritium to construct various facilities.</li>
+                <li>Manage your population by building Dorms, Dining Facilities, and Entertainment Complexes to attract and house both Enlisted Personnel and Officers.</li>
+                <li>Develop your military infrastructure with structures like Small Arms facilities, Explosives Production, Laser Manufacturing, Sandbag Walls, Watch Towers, and Radar Facilities to maintain Military Readiness.</li>
+                <li>Balance your power grid using Solar Panels, Fission Reactors, Fusion Reactors, and Breeder Fusion reactors to keep everything running.</li>
+                <li>Extract resources from the planet using Dig Sites, Drill Sites, and Deep Mines located at Water Sources, Fuel Deposits, Uranium Deposits, and Tritium Sources.</li>
+                <li>Navigate natural obstacles like Rough Terrain and discover Ancient Ruins scattered across the map.</li>
+                <li>Play several turns ahead of other players asynchronously--but watch out! If another player makes a move that invalidates your future turns, you'll have to replay those turns.</li>
+                <li>Switch between different HUD modes to view last-turn changes, projected next-turn changes, and current values/storage.</li>
+                <li>Enable or disable structures to manage resource consumption and production.</li>
+                <li>View detailed information about structures and resources via tooltips (hover on desktop).</li>
+                <li>Play in either English or Japanese--good for language practice!</li>
+                <li>Have multiple games going simultaneously with different groups of players.</li>
+            </ul>
+
+            <h3>Limitations:</h3>
+            <ul>
+                <li>You can only login with a <a href="https://discord.com/">Discord</a> account.</li>
+                <li>The browser tab won't flash or play a sound when invited to a game or when it's your turn. Coordinate with your co-players on Discord first ;)</li>
+                <li>There's no mid-game player invite system yet--all players must join at the start.</li>
+                <li>The special turn replay mechanics when actions are invalidated are still being refined (it's on the to-do list to add better indicators showing *when* you're playing relative to the "actual" turn).</li>
+                <li>No player-to-player trade agreements yet, even though rare resources spawn less frequently than there are players, so you'll need to coordinate resource sharing informally.</li>
+                <li>Tooltips don't work properly on mobile devices without a mouse, and the map poster generation produces pure-color images on mobile.</li>
+                <li>No in-game chat system (though a Discord embed would be nice).</li>
+                <li>No push notifications--you have to check the game manually or refresh to see updates (long-polling or web sockets would be nice to implement).</li>
+                <li>There's no map ping or flag placement system yet for coordinating with teammates.</li>
+                <li>The quick tutorial game for first-time players hasn't been implemented yet.</li>
+                <li>Enabling/disabling structures doesn't immediately update resource numbers for the current turn, which can feel a bit odd.</li>
+                <li>Resource storage is currently boundless (though dedicated storage structures like improved Dorms are partially set up in the system).</li>
+            </ul>
+
+            <h3>Gameplay rules in brief:</h3>
+            <ul>
+                <li>You and your fellow colonists are establishing a base on Burgustar, a distant planet with a cautious alien species that watches your every move.</li>
+                <li>The goal is simple but challenging: keep your Military Readiness higher than the aliens' Enemy Strength, or they'll attack out of fear.</li>
+                <li>Gather Construction Materials from the surface to build structures, then extract deeper resources like Water, Fuel, Uranium, and Tritium using specialized facilities.</li>
+                <li>Balance your Electricity production and consumption--nearly everything runs on power, including your power generators and construction equipment!</li>
+                <li>Attract colonists by providing Housing (Dorms) and Luxury amenities (Dining Facilities and Entertainment Complexes). Enlisted Personnel will pitch tents if there aren't enough dorms, but they won't be happy about it.</li>
+                <li>Officers require extra luxuries due to their higher education and serve as your Command structure for coordinating military units.</li>
+                <li>Build defensive structures (Sandbag Walls, Watch Towers, Radar Facilities) and offensive capabilities (Small Arms, Explosives Production, Laser Manufacturing) to boost Military Readiness.</li>
+                <li>Use natural Rough Terrain to your advantage by building walls that link up to it to protect your base.</li>
+                <li>Discover Ancient Ruins that may provide... resources, of course.</li>
+                <li>The asynchronous turn system lets you play ahead of other players, but if someone's earlier action invalidates your future moves, you'll be forced to replay those turns--plan carefully!</li>
+                <li>Coordinate with your teammates to share rare resources (there aren't enough spawns for everyone to get everything they need).</li>
+                <li>It's always sunny on Burgustar! Solar Panels work great, but you'll need nuclear power eventually.</li>
+                <li>Demolition Charges can be used to... well, demolish things with carefully calculated destruction.</li>
+            </ul>
+
+            <p>
+                The core gameplay loop revolves around the tension between expansion and defense: you need to grow your colony to gather resources and build military infrastructure, but every turn, the aliens grow stronger, too. Work together with your fellow colonists to optimize resource gathering, share rare materials, and coordinate your defensive preparations. As long as your Military Readiness exceeds their Enemy Strength, the aliens will continue to watch and wait, and eventually, they might trust that you never intended any harm. Hopefully, you'll never need all that firepower you're building...
+            </p>
         </details>
     </div>
 </body>
